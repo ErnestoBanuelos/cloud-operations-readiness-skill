@@ -78,6 +78,42 @@ The capability applies the following detection logic in the order shown:
    | HIGH | At least one removal of a safety-relevant component; or any security context field modified; or image tag changed to mutable reference |
    | CRITICAL | Any write-command artefact detected in State B that was absent in State A; or any component whose removal would cause the effective replica count in State B to fall below the `minAvailable` value declared in the PodDisruptionBudget present in State A. When no PodDisruptionBudget is present in State A, this trigger does not apply and the removal is classified as HIGH. The capability reads `minAvailable` from the PDB artefact field; it does not query live cluster state. |
 
+#### Risk Classification Logic — Evaluation Order and Interface Contract
+
+   The risk level is determined by evaluating the following conditions in
+   descending priority order. The first matching condition determines the
+   classification. No lower-priority condition is evaluated once a match is found.
+
+   | Priority | Risk Level | Trigger Condition |
+   |---|---|---|
+   | 1 (highest) | CRITICAL | A write-command artefact is detected in State B that was absent in State A |
+   | 2 | CRITICAL | The Deployment `replicas` value in State B is less than the `minAvailable` value declared in the PodDisruptionBudget in State A. **This trigger applies only when a PodDisruptionBudget is present in State A.** When no PDB is present in State A, this condition falls through to the HIGH evaluation. The capability reads `minAvailable` from the PDB artefact field; it does not query live cluster state. |
+   | 3 | HIGH | Removal of a safety-relevant component (PDB, securityContext, readiness probe); any security context field modified; image tag changed to a mutable reference |
+   | 4 | MEDIUM | At least one modification to a non-safety field; or at least one added component with undetermined ownership |
+   | 5 (lowest) | LOW | All other cases |
+
+   **Severity ordering:** `LOW < MEDIUM < HIGH < CRITICAL`
+
+   **Interface contract emitted by this logic:**
+
+   ```
+   risk_level:      "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+   critical_active: boolean  — true if and only if risk_level == "CRITICAL"
+   rationale:       string   — one sentence citing the trigger condition that
+                               produced the classification
+   ```
+
+   All downstream output sections (Risk Level section formatter, Escalation Block
+   Builder, NFR Vocabulary Validator, and Acceptance Criteria) consume only
+   `risk_level`, `critical_active`, and `rationale`. No downstream section
+   re-evaluates artefacts or findings independently.
+
+   **Preserved behaviour:** LOW, MEDIUM, and HIGH trigger conditions are unchanged
+   from spec v1.0.1. This logic block adds two CRITICAL triggers at priorities 1
+   and 2 above the existing HIGH trigger. The PDB-presence carve-out at priority 2
+   ensures that a replica-count reduction when no PDB exists in State A produces
+   HIGH, not CRITICAL.
+
 7. **Recommended engineering review** — a list of up to five named, role-attributed actions
    using the standard escalation block format (Action / Role / Condition / Artefact). Actions
    are ranked by risk level descending. The capability never recommends execution of write
