@@ -276,3 +276,147 @@ available evidence (SKILL.md §Inputs; CLAUDE.md Rule 3).
 
 Never infer, estimate, or fabricate missing values.
 """
+
+
+# ---------------------------------------------------------------------------
+# Drift Analysis domain models
+# ---------------------------------------------------------------------------
+# Traceable to: specs/operational-drift-analysis/spec.md §1.2 (Drift Detection
+# Logic) and §1.3 (Output Structure).
+#
+# These are immutable value objects.  They carry no logic — they record a
+# single finding or recommendation produced by the classification layer.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Finding:
+    """
+    A single drift finding produced during state comparison.
+
+    Traceable to: specs/operational-drift-analysis/spec.md §1.2 Steps 2-4
+    (Added, Removed, and Modified component detection).
+
+    Each finding represents one discrete observable delta between State A and
+    State B.  Findings are immutable; they are never mutated after creation.
+
+    Attributes
+    ----------
+    component_type : str
+        The type of the component that changed (e.g. "Deployment", "Service",
+        "PodDisruptionBudget", "securityContext field").
+    component_name : str
+        The name of the component as it appears in the artefact.
+    category : str
+        One of ``"added"``, ``"removed"``, or ``"modified"``.  These map
+        directly to the three detection categories in spec §1.2.
+    risk_level : RiskLevel
+        The initial risk classification for this individual finding, evaluated
+        against the trigger conditions in spec §1.2 Step 6.
+    artefact_reference : str
+        The artefact file and field from which the finding was derived.
+        Traceable to spec §1.4: "Every finding must cite the artefact and
+        field from which it was derived."
+    state_a_value : str
+        The value present in State A for this field.  Empty string when the
+        component is newly added (category == "added").
+    state_b_value : str
+        The value present in State B for this field.  Empty string when the
+        component is absent in State B (category == "removed").
+    owner : str
+        Ownership label: ``"[ops]"``, ``"[mine/Product]"``, or the UNKNOWN
+        sentinel when ownership cannot be determined (CLAUDE.md Rule 3;
+        spec §1.2 Step 2).
+    """
+
+    component_type: str
+    component_name: str
+    category: str
+    risk_level: RiskLevel
+    artefact_reference: str
+    state_a_value: str = ""
+    state_b_value: str = ""
+    owner: str = UNKNOWN
+
+
+@dataclass(frozen=True)
+class Recommendation:
+    """
+    A single recommended engineering review action.
+
+    Traceable to: specs/operational-drift-analysis/spec.md §1.2 Step 7
+    ("Recommended engineering review — a list of up to five named,
+    role-attributed actions using the standard escalation block format.")
+    and SKILL.md §Escalation Policy / CLAUDE.md §Escalation Format.
+
+    Recommendations are immutable value objects.  They carry no execution
+    logic — they surface an action for human review and approval.
+
+    Attributes
+    ----------
+    action : str
+        The specific action that must be taken.  Never a write command;
+        write commands are surfaced in escalation sections only (SKILL.md
+        §Tool Allowlist; CLAUDE.md Rule 1).
+    role : str
+        The named human role responsible for executing the action.
+    condition : str
+        The trigger condition or approval gate that makes this action necessary.
+    artefact : str
+        The relevant artefact or document to reference.
+    risk_level : RiskLevel
+        The severity level of the finding that triggered this recommendation.
+        Used to rank recommendations in descending priority order (spec §1.2
+        Step 7: "Actions are ranked by risk level descending.").
+    """
+
+    action: str
+    role: str
+    condition: str
+    artefact: str
+    risk_level: RiskLevel = RiskLevel.MEDIUM
+
+
+@dataclass(frozen=True)
+class ReadinessReport:
+    """
+    Immutable summary of an operational readiness assessment.
+
+    Traceable to: SKILL.md §Output Type 4 and REFERENCE.md §Readiness Reviews.
+
+    This model captures the verdict, the gap inventory, and the artefact
+    reference for a single readiness evaluation.  It is a data-only value
+    object; all construction and validation logic lives in other modules.
+
+    Note: The full mutable output dataclass (with all six question answers,
+    support tiers, and next actions) lives in ``report.py``.  This model
+    captures the minimal immutable summary required by the domain layer.
+
+    Attributes
+    ----------
+    verdict : ReadinessVerdict
+        The final go/no-go verdict.  Must be one of the three named values
+        defined by SKILL.md §Output Type 4 and CLAUDE.md Rule 7.
+        No gradational language is permitted.
+    maturity_gaps : tuple[str, ...]
+        An immutable sequence of gap descriptions.  Each entry includes a
+        recommended next action and a named owner.  An empty tuple means no
+        gaps were identified (verdict will be READY in this case).
+        Traceable to SKILL.md §Output Type 4: "Maturity Gaps — bulleted list;
+        each gap includes recommended next action."
+    artefact_reference : str
+        The artefact set identifier that was evaluated (e.g. ``"artefacts/
+        800-wide/ 01-06"``).  Traceable to spec §1.4: findings must cite
+        their evidence source.
+    critical_drift_active : bool
+        ``True`` when a CRITICAL drift risk level is propagated into this
+        readiness assessment.  A CRITICAL drift level is a hard block:
+        the verdict cannot be ``Ready`` when this flag is ``True``.
+        Traceable to specs/operational-drift-analysis/spec.md §5.2 and
+        changes/operational-drift-risk-model/delta.md §A-3.
+    """
+
+    verdict: ReadinessVerdict
+    maturity_gaps: tuple[str, ...] = ()
+    artefact_reference: str = UNKNOWN
+    critical_drift_active: bool = False
