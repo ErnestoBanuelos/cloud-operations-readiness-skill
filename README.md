@@ -10,6 +10,96 @@ human role.
 
 ---
 
+## Repository Contents
+
+This repository contains four distinct layers:
+
+### 1. Skill Specification
+
+The portable, normative definition of the Skill's behaviour.
+
+| File | Purpose |
+|---|---|
+| `SKILL.md` | Claude Skill definition — four output types, invariant rules, tool allowlist |
+| `REFERENCE.md` | Operational reference and engineering best practices |
+| `CLAUDE.md` | Hot context — non-negotiable rules for every invocation |
+
+### 2. Context Bundle
+
+The synthetic evidence base for the `cart-api` reference service.
+
+| Path | Contents |
+|---|---|
+| `artefacts/800-wide/01-stack-map.md` | Component ownership map |
+| `artefacts/800-wide/02-deploy-manifest.md` | Kubernetes Deployment and Service manifest |
+| `artefacts/800-wide/03-ci-workflow.md` | GitHub Actions CI/CD workflow |
+| `artefacts/800-wide/04-incident-runbook.md` | OOMKill incident analysis and runbook |
+| `artefacts/800-wide/05-cost-estimate.md` | Monthly cost estimate with AI meter split |
+| `artefacts/800-wide/06-readiness-brief.md` | Executive operational readiness brief |
+
+### 3. Reference Engine
+
+A canonical Python implementation of the Skill specification (v0.1).
+The specification remains the single source of truth.
+The implementation demonstrates one correct realisation of the specification.
+
+```
+src/
+└── readiness_engine/
+    ├── __init__.py     # Package metadata and public surface
+    ├── models.py       # Domain types — enumerations, constants, dataclasses
+    ├── classifier.py   # Classify input text into one of four request types
+    ├── validator.py    # Validate report structure against specification rules
+    ├── report.py       # Output report dataclasses for the four output types
+    └── parser.py       # Parse raw text / dict inputs into structured containers
+```
+
+Install the package (development mode):
+
+```bash
+pip install -e ".[dev]"
+```
+
+### 4. Verification Assets
+
+Tests and CI configuration that validate the Reference Engine against
+the specification.
+
+```
+tests/
+├── __init__.py           # Test suite documentation
+├── test_models.py        # Specification constant and enumeration invariants
+├── test_classifier.py    # Classification accuracy against labelled fixtures
+├── test_validator.py     # Structural validation rules from SKILL.md
+└── test_parser.py        # Parser surface extraction from synthetic inputs
+```
+
+Run the verification suite:
+
+```bash
+pytest tests/
+```
+
+Lint and type-check:
+
+```bash
+ruff check src/ tests/
+mypy src/
+```
+
+### 5. Engineering Artefacts
+
+Decision records, session logs, and planning documents.
+
+```
+docs/adr/        — Architecture Decision Records
+sessions/        — Deep Engineering session logs
+specs/           — Specifications and brownfield deltas
+changes/         — Change records
+```
+
+---
+
 ## Purpose
 
 Production incidents are rarely caused by a single missing configuration. They emerge
@@ -23,44 +113,6 @@ This Skill applies a consistent, structured lens to four operational domains:
 2. **Deployment and IaC Audit** — manifest and workflow review against a fixed checklist
 3. **Cloud Cost Review** — infrastructure rent vs. AI meter, with ownership and cap
 4. **Operational Readiness Review** — go/no-go decision with explicit gap inventory
-
----
-
-## Repository Structure
-
-```
-cloud-operations-readiness-skill/
-├── README.md                          # This file
-├── SKILL.md                           # Claude Skill definition
-├── REFERENCE.md                       # Operational reference and best practices
-├── examples.md                        # Annotated worked examples
-├── run-log.md                         # Execution log demonstrating Skill behaviour
-└── artefacts/
-    └── 800-wide/
-        ├── 01-stack-map.md            # Component ownership map (cart-api)
-        ├── 02-deploy-manifest.md      # Kubernetes Deployment and Service manifest
-        ├── 03-ci-workflow.md          # GitHub Actions CI/CD workflow
-        ├── 04-incident-runbook.md     # OOMKill incident analysis and runbook
-        ├── 05-cost-estimate.md        # Monthly cost estimate with AI meter split
-        └── 06-readiness-brief.md      # Executive operational readiness brief
-```
-
-### Artefact Relationships
-
-The six artefacts under `artefacts/800-wide/` form a layered evidence chain for the
-fictional `cart-api` checkout service:
-
-| Artefact | Answers |
-|---|---|
-| `01-stack-map.md` | What components exist and who owns them? |
-| `02-deploy-manifest.md` | How is the service deployed? What configuration gaps exist? |
-| `03-ci-workflow.md` | How does code reach production? What supply-chain controls are present? |
-| `04-incident-runbook.md` | What happened in the last incident? How do we respond next time? |
-| `05-cost-estimate.md` | What does this service cost per month? Who owns the AI meter spend? |
-| `06-readiness-brief.md` | Is the service ready to ship? What is the go/no-go decision? |
-
-The Skill uses these artefacts as its primary evidence base. When invoked against a
-different service, the engineer provides equivalent artefacts as inputs.
 
 ---
 

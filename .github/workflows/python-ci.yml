@@ -1,0 +1,124 @@
+# =============================================================================
+# .github/workflows/python-ci.yml
+#
+# Python CI — installs, lints, type-checks, and tests the Reference Engine.
+#
+# Triggers
+# --------
+# - Every push to main / master.
+# - Every pull request targeting main / master.
+# - Manual dispatch (workflow_dispatch) for ad-hoc runs.
+#
+# Jobs
+# ----
+# ci — single job that runs all four steps in sequence.
+#
+# Design decisions
+# ----------------
+# Single job (not matrix):
+#   The Reference Engine targets Python >=3.11 (CLAUDE.md §Technology Stack).
+#   A multi-version matrix would add ~90s of runner startup per version with
+#   no additional signal at v0.1.  Matrix can be added in a future kata when
+#   compatibility against 3.12+ is intentionally verified.
+#
+# No Docker:
+#   The package has zero runtime dependencies (standard library only).
+#   Containerisation provides no benefit and is explicitly out of scope.
+#
+# No deployment:
+#   This workflow validates; it never publishes or deploys.
+#
+# mypy scope:
+#   mypy is run against src/ only.  tests/ are covered by the test runner;
+#   strict type enforcement in test helpers provides diminishing returns.
+#
+# Coverage:
+#   --cov=readiness_engine --cov-report=term-missing is passed to pytest so
+#   the CI log shows coverage without requiring an upload step.  No external
+#   coverage service is configured at v0.1.
+#
+# Pinning:
+#   actions/checkout and actions/setup-python are pinned to major version tags
+#   (v4).  Pinning to a full commit SHA is best practice for supply-chain
+#   security and should be adopted when the repository adds image signing or
+#   a supply-chain audit step.
+# =============================================================================
+
+name: Python CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+# Cancel in-progress runs of the same workflow on the same branch when a
+# newer push arrives, saving runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Install · Lint · Type-check · Test
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Set up Python
+      # -----------------------------------------------------------------------
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          # Cache pip's download cache so repeated installs are fast.
+          # The cache key incorporates the OS, Python version, and
+          # pyproject.toml so it invalidates whenever dependencies change.
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
+
+      # -----------------------------------------------------------------------
+      # 3. Install
+      # -----------------------------------------------------------------------
+      - name: Install package and dev dependencies
+        run: pip install --upgrade pip && pip install -e ".[dev]"
+
+      # -----------------------------------------------------------------------
+      # 4. Lint — ruff
+      # -----------------------------------------------------------------------
+      - name: Lint with ruff
+        # --no-fix: CI must not silently auto-correct; failures require a
+        # local fix and a new commit.
+        run: ruff check src/ tests/ --no-fix
+
+      # -----------------------------------------------------------------------
+      # 5. Format check — ruff format
+      # -----------------------------------------------------------------------
+      - name: Check formatting with ruff format
+        run: ruff format src/ tests/ --check
+
+      # -----------------------------------------------------------------------
+      # 6. Type-check — mypy
+      # -----------------------------------------------------------------------
+      - name: Type-check with mypy
+        run: mypy src/
+
+      # -----------------------------------------------------------------------
+      # 7. Test — pytest with coverage
+      #
+      # --cov-fail-under is set in pyproject.toml [tool.coverage.report].
+      # report.py (pure dataclasses) is excluded from coverage measurement;
+      # see pyproject.toml [tool.coverage.run] omit.
+      # -----------------------------------------------------------------------
+      - name: Run tests with pytest
+        run: >
+          pytest tests/
+          --cov=readiness_engine
+          --cov-report=term-missing

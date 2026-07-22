@@ -1,0 +1,199 @@
+[build-system]
+requires = ["setuptools>=72", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ---------------------------------------------------------------------------
+# Package metadata
+# ---------------------------------------------------------------------------
+
+[project]
+name = "readiness-engine"
+version = "0.1.0"
+description = "Reference Engine for the Cloud Operations Readiness Skill"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "See LICENSE" }
+keywords = ["cloud", "operations", "readiness", "SRE", "kubernetes"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Systems Administration",
+]
+
+# No runtime dependencies — standard library only.
+# CLAUDE.md §Escalation Gates: stop before adding new dependencies.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "ruff>=0.9",
+    "mypy>=1.11",
+    "pre-commit>=3.7",
+]
+
+[project.urls]
+"Source" = "https://github.com/example/cloud-operations-readiness-skill"
+"Bug Tracker" = "https://github.com/example/cloud-operations-readiness-skill/issues"
+
+# ---------------------------------------------------------------------------
+# Package discovery
+# ---------------------------------------------------------------------------
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["tests"]
+
+addopts = [
+    # Output
+    "--tb=short",
+    "-q",
+    # Strict mode — unknown markers and config keys are errors, not warnings.
+    "--strict-markers",
+    "--strict-config",
+    # Use importlib for reliable src-layout imports without editable installs.
+    "--import-mode=importlib",
+    # Coverage is opt-in; don't force it in every local run.
+    # Pass --cov=readiness_engine on CI explicitly.
+]
+
+# Treat DeprecationWarnings from the package as errors so regressions
+# are caught before they reach production.
+filterwarnings = [
+    "error::DeprecationWarning:readiness_engine",
+    "error::PendingDeprecationWarning:readiness_engine",
+]
+
+# Explicit marker registry — prevents typos from silently skipping tests.
+markers = [
+    "slow: marks tests as slow (select with -m slow)",
+    "integration: marks tests that require external services",
+]
+
+# ---------------------------------------------------------------------------
+# ruff — linting and formatting
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+# Do not auto-fix unsafe changes in CI; allow only safe fixes.
+# Unsafe fixes are permitted locally via --unsafe-fixes.
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "UP",   # pyupgrade
+    "ANN",  # flake8-annotations (type hints)
+    "PT",   # flake8-pytest-style
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    # ANN401 — Any is permitted at the parse boundary (dict[str, Any] in
+    # validators and parsers that consume untyped external input).
+    "ANN401",
+    # PT — pytest-style: allow both assert forms; do not mandate fixtures.
+    "PT011",  # pytest.raises without match= — acceptable for TypeError guards
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests do not require full annotation coverage.
+"tests/**/*.py" = [
+    "ANN",    # no annotation enforcement in tests
+    "SIM117", # nested with-statements in test helpers are readable
+    # SIM300 flags `assert value == pytest.approx(x)` as a "Yoda condition".
+    # pytest convention is value on the left; suppress the false positive.
+    "SIM300",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["readiness_engine"]
+
+[tool.ruff.format]
+# Use double quotes consistently (matches existing source).
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.11"
+# Enable all strict checks explicitly so the exact set is visible and
+# auditable. Equivalent to --strict but without surprises when mypy adds
+# new strict flags in future releases.
+warn_unused_configs = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true
+extra_checks = true
+# No external dependencies → no third-party stubs required.
+ignore_missing_imports = false
+
+[[tool.mypy.overrides]]
+# Tests are not shipped; relax annotation requirements so test helpers
+# and fixture functions don't need full signatures.
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
+
+# ---------------------------------------------------------------------------
+# coverage
+# ---------------------------------------------------------------------------
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+# report.py contains only dataclass definitions (no logic).  Measuring
+# coverage of auto-generated __init__ / __repr__ / __eq__ methods would
+# test CPython internals, not the Reference Engine.  Exclude it so the
+# coverage threshold reflects executable logic only.
+omit = [
+    "src/readiness_engine/report.py",
+]
+
+[tool.coverage.report]
+# Require 90% coverage of the logic modules.
+fail_under = 90
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    # Standard pragma to opt out of coverage for unreachable branches.
+    "pragma: no cover",
+    # Abstract / protocol stubs never executed directly.
+    "raise NotImplementedError",
+    # Type-checking-only imports (never executed at runtime).
+    "if TYPE_CHECKING:",
+]

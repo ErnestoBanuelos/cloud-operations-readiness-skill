@@ -1,0 +1,88 @@
+# =============================================================================
+# .pre-commit-config.yaml
+#
+# Pre-commit hooks for cloud-operations-readiness-skill.
+#
+# Install:
+#   pip install pre-commit
+#   pre-commit install          # installs the git hook
+#   pre-commit run --all-files  # run against the whole repository
+#
+# Design decisions
+# ----------------
+# 1. ruff handles both linting and formatting.  No separate black/isort hooks.
+# 2. mypy is NOT run as a pre-commit hook.  Rationale: mypy requires the
+#    package to be installed in the hook's isolated environment (including all
+#    optional dev dependencies).  This makes the hook slow and fragile.
+#    mypy runs in CI (python-ci.yml) instead, where the full environment is
+#    always available.
+# 3. All hooks are pinned to exact revision tags, not branches, so the hook
+#    environment is reproducible and auditable.
+# =============================================================================
+
+default_language_version:
+  python: python3.11
+
+# Fail fast: stop after the first hook failure in each run.
+fail_fast: false
+
+repos:
+
+  # ---------------------------------------------------------------------------
+  # pre-commit-hooks — general file hygiene
+  # https://github.com/pre-commit/pre-commit-hooks
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Prevent committing files with conflict markers.
+      - id: check-merge-conflict
+
+      # Detect accidentally committed private keys.
+      - id: detect-private-key
+
+      # Ensure all Python files parse without syntax errors.
+      - id: check-ast
+
+      # Enforce consistent line endings (LF).
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+      # Remove trailing whitespace.
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      # Ensure files end with a newline.
+      - id: end-of-file-fixer
+
+      # Validate YAML files are well-formed.
+      - id: check-yaml
+        # Allow the GitHub Actions workflow syntax (uses: with anchors).
+        args: [--unsafe]
+
+      # Validate TOML files (pyproject.toml).
+      - id: check-toml
+
+      # Prevent committing directly to protected branches.
+      - id: no-commit-to-branch
+        args: [--branch=main, --branch=master]
+
+  # ---------------------------------------------------------------------------
+  # ruff — linting and formatting
+  # https://github.com/astral-sh/ruff-pre-commit
+  #
+  # Two hooks: lint (check + fix) then format.
+  # Lint runs first so that fixable lint issues are resolved before formatting
+  # is applied, preventing a second round-trip.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      # Lint: apply safe auto-fixes.
+      - id: ruff
+        args: [--fix]
+        types_or: [python, pyi]
+
+      # Format: apply ruff formatter (replaces black).
+      - id: ruff-format
+        types_or: [python, pyi]
