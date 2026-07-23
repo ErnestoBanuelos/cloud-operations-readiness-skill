@@ -133,6 +133,127 @@ class TestParseAuditInput:
 
 
 # ---------------------------------------------------------------------------
+# parse_audit_input — :latest detection boundary cases
+#
+# Adversarial Pass (pre-mortem Cause 2): the previous implementation used a
+# raw ":latest" substring scan across the entire manifest text.  This
+# triggered false positives when ":latest" appeared in comments, annotations,
+# or label values rather than on an actual YAML image: field line.
+#
+# The fix anchors detection to lines matching:
+#   ^\s*-?\s*image:\s*\S+:latest\s*$
+#
+# The four tests below document the correct behaviour after the fix.
+# ---------------------------------------------------------------------------
+
+MANIFEST_LATEST_IMAGE_FIELD = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: cart-api
+          image: ghcr.io/example/cart-api:latest
+"""
+
+MANIFEST_DIGEST_WITH_LATEST_ANNOTATION = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-api
+  annotations:
+    deployment.kubernetes.io/previous-image: "ghcr.io/example/cart-api:latest"
+spec:
+  template:
+    spec:
+      containers:
+        - name: cart-api
+          image: ghcr.io/example/cart-api@sha256:abc123def456
+"""
+
+MANIFEST_LATEST_IN_COMMENT = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-api
+# Previously used :latest — now pinned to digest
+spec:
+  template:
+    spec:
+      containers:
+        - name: cart-api
+          image: ghcr.io/example/cart-api@sha256:abc123def456
+"""
+
+MANIFEST_LATEST_IN_LABEL = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-api
+  labels:
+    image-policy: allow-latest
+spec:
+  template:
+    spec:
+      containers:
+        - name: cart-api
+          image: ghcr.io/example/cart-api@sha256:abc123def456
+"""
+
+
+class TestParseAuditInputLatestDetectionBoundary:
+    """
+    Verify that :latest is detected only on actual YAML image: field lines.
+
+    Traceable to: Adversarial Pass — pre-mortem Cause 2 (false-positive
+    detection of ':latest' outside Kubernetes image fields).
+    Fix: _IMAGE_LATEST_RE anchors match to image: field lines only.
+    """
+
+    def test_image_field_with_latest_tag_is_detected(self) -> None:
+        """
+        Positive: image: repo/app:latest on an image: line → detected.
+
+        Represents the standard case the signal is designed to catch.
+        """
+        result = parse_audit_input(MANIFEST_LATEST_IMAGE_FIELD)
+        assert result.has_image_tag_latest is True
+
+    def test_latest_in_annotation_with_digest_image_not_detected(self) -> None:
+        """
+        Negative: annotation value contains ':latest'; image: field uses digest.
+
+        The annotation is not an image reference.  The live container uses a
+        digest.  has_image_tag_latest must be False.
+        """
+        result = parse_audit_input(MANIFEST_DIGEST_WITH_LATEST_ANNOTATION)
+        assert result.has_image_tag_latest is False
+
+    def test_latest_in_comment_not_detected(self) -> None:
+        """
+        Negative: comment line contains ':latest'; image: field uses digest.
+
+        Comment text must not trigger the image-tag signal.
+        """
+        result = parse_audit_input(MANIFEST_LATEST_IN_COMMENT)
+        assert result.has_image_tag_latest is False
+
+    def test_latest_in_label_value_not_detected(self) -> None:
+        """
+        Negative: label value contains 'latest'; image: field uses digest.
+
+        A label such as 'image-policy: allow-latest' must not trigger
+        the signal.  The label value does not contain the ':latest' tag
+        pattern on an image: field line.
+        """
+        result = parse_audit_input(MANIFEST_LATEST_IN_LABEL)
+        assert result.has_image_tag_latest is False
+
+
+# ---------------------------------------------------------------------------
 # parse_cost_input — dict form
 # ---------------------------------------------------------------------------
 

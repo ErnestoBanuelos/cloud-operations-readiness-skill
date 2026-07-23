@@ -21,10 +21,33 @@ or minimally populated; full extraction is a future kata concern.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from readiness_engine.models import UNKNOWN
+
+# ---------------------------------------------------------------------------
+# Compiled patterns
+# ---------------------------------------------------------------------------
+
+# Matches a YAML image: field line whose tag is exactly ":latest".
+# Anchored to line boundaries (re.MULTILINE) so comments, annotations, and
+# label values that happen to contain ":latest" are not matched.
+#
+# Pattern breakdown:
+#   ^\s*          — optional leading indentation
+#   -?\s*         — optional YAML list dash (container entries)
+#   image:\s*     — the "image:" key with optional trailing whitespace
+#   \S+:latest    — any non-whitespace image reference ending in ":latest"
+#   \s*$          — optional trailing whitespace before end of line
+#
+# Traceable to: Adversarial Pass finding (pre-mortem Cause 2) — false-positive
+# detection of ":latest" outside Kubernetes image fields.
+_IMAGE_LATEST_RE: re.Pattern[str] = re.compile(
+    r"^\s*-?\s*image:\s*\S+:latest\s*$",
+    re.MULTILINE,
+)
 
 # ---------------------------------------------------------------------------
 # Input containers
@@ -171,7 +194,12 @@ def parse_audit_input(text: str) -> RawAuditInput:
 
     # Minimal surface extraction — no logic, just presence detection.
     lower = stripped.lower()
-    result.has_image_tag_latest = ":latest" in lower
+    # Anchor ":latest" detection to actual YAML image: field lines.
+    # A raw ":latest" substring scan would produce false positives for
+    # comments, annotations, and label values (Adversarial Pass, pre-mortem
+    # Cause 2).  The compiled module-level regex _IMAGE_LATEST_RE restricts
+    # the match to lines of the form:  image: <ref>:latest
+    result.has_image_tag_latest = bool(_IMAGE_LATEST_RE.search(stripped))
     result.has_security_context = "securitycontext:" in lower
     result.has_resource_limits = "limits:" in lower
     result.has_liveness_probe = "livenessprobe:" in lower
