@@ -1065,28 +1065,34 @@ class TestReturnTypeInvariants:
     These tests verify the interface contract properties (Seam 1 — tasks.md).
     """
 
-    @pytest.mark.parametrize("findings", [
-        [],
-        [_low_finding()],
-        [_medium_finding()],
-        [_high_finding()],
-        [_write_command_finding()],
-        [_pdb_replica_violation_finding()],
-        [_low_finding(), _medium_finding(), _high_finding()],
-    ])
+    @pytest.mark.parametrize(
+        "findings",
+        [
+            [],
+            [_low_finding()],
+            [_medium_finding()],
+            [_high_finding()],
+            [_write_command_finding()],
+            [_pdb_replica_violation_finding()],
+            [_low_finding(), _medium_finding(), _high_finding()],
+        ],
+    )
     def test_return_is_always_risk_level(self, findings: list[Finding]) -> None:
         """Return type is always RiskLevel."""
         result = classify_risk(findings)
         assert isinstance(result, RiskLevel)
 
-    @pytest.mark.parametrize("findings", [
-        [],
-        [_low_finding()],
-        [_medium_finding()],
-        [_high_finding()],
-        [_write_command_finding()],
-        [_pdb_replica_violation_finding()],
-    ])
+    @pytest.mark.parametrize(
+        "findings",
+        [
+            [],
+            [_low_finding()],
+            [_medium_finding()],
+            [_high_finding()],
+            [_write_command_finding()],
+            [_pdb_replica_violation_finding()],
+        ],
+    )
     def test_return_is_in_vocabulary(self, findings: list[Finding]) -> None:
         """
         Return value must be one of the four permitted vocabulary tokens.
